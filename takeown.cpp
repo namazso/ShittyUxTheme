@@ -14,11 +14,12 @@ BOOL SetPrivilege(
   LUID luid;
 
   if (!LookupPrivilegeValue(
-    NULL,            // lookup privilege on local system
+    nullptr,            // lookup privilege on local system
     lpszPrivilege,   // privilege to lookup 
-    &luid))        // receives LUID of privilege
+    &luid
+  ))        // receives LUID of privilege
   {
-    printf("LookupPrivilegeValue error: %u\n", GetLastError());
+    wprintf(L"LookupPrivilegeValue error: %lu\n", GetLastError());
     return FALSE;
   }
 
@@ -36,17 +37,18 @@ BOOL SetPrivilege(
     FALSE,
     &tp,
     sizeof(TOKEN_PRIVILEGES),
-    (PTOKEN_PRIVILEGES)NULL,
-    (PDWORD)NULL))
+    nullptr,
+    nullptr
+  ))
   {
-    printf("AdjustTokenPrivileges error: %u\n", GetLastError());
+    wprintf(L"AdjustTokenPrivileges error: %lu\n", GetLastError());
     return FALSE;
   }
 
   if (GetLastError() == ERROR_NOT_ALL_ASSIGNED)
 
   {
-    printf("The token does not have the specified privilege. \n");
+    wprintf(L"The token does not have the specified privilege. \n");
     return FALSE;
   }
 
@@ -55,42 +57,58 @@ BOOL SetPrivilege(
 
 BOOL TakeOwnership(LPTSTR lpszOwnFile)
 {
-
   BOOL bRetval = FALSE;
 
-  HANDLE hToken = NULL;
-  PSID pSIDAdmin = NULL;
-  PSID pSIDEveryone = NULL;
-  PACL pACL = NULL;
+  HANDLE hToken = nullptr;
+  PSID pSIDAdmin = nullptr;
+  PSID pSIDEveryone = nullptr;
+  PACL pACL = nullptr;
   SID_IDENTIFIER_AUTHORITY SIDAuthWorld =
     SECURITY_WORLD_SID_AUTHORITY;
   SID_IDENTIFIER_AUTHORITY SIDAuthNT = SECURITY_NT_AUTHORITY;
   const int NUM_ACES = 2;
   EXPLICIT_ACCESS ea[NUM_ACES];
-  DWORD dwRes;
+  DWORD dwRes = 0;
 
   // Specify the DACL to use.
   // Create a SID for the Everyone group.
-  if (!AllocateAndInitializeSid(&SIDAuthWorld, 1,
+  if (!AllocateAndInitializeSid(
+    &SIDAuthWorld,
+    1,
     SECURITY_WORLD_RID,
     0,
-    0, 0, 0, 0, 0, 0,
-    &pSIDEveryone))
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    &pSIDEveryone
+  ))
   {
-    printf("AllocateAndInitializeSid (Everyone) error %u\n",
-      GetLastError());
+    wprintf(
+      L"AllocateAndInitializeSid (Everyone) error %lu\n",
+      GetLastError()
+    );
     goto Cleanup;
   }
 
   // Create a SID for the BUILTIN\Administrators group.
-  if (!AllocateAndInitializeSid(&SIDAuthNT, 2,
+  if (!AllocateAndInitializeSid(
+    &SIDAuthNT,
+    2,
     SECURITY_BUILTIN_DOMAIN_RID,
     DOMAIN_ALIAS_RID_ADMINS,
-    0, 0, 0, 0, 0, 0,
-    &pSIDAdmin))
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    &pSIDAdmin
+  ))
   {
-    printf("AllocateAndInitializeSid (Admin) error %u\n",
-      GetLastError());
+    wprintf(L"AllocateAndInitializeSid (Admin) error %lu\n", GetLastError());
     goto Cleanup;
   }
 
@@ -112,12 +130,14 @@ BOOL TakeOwnership(LPTSTR lpszOwnFile)
   ea[1].Trustee.TrusteeType = TRUSTEE_IS_GROUP;
   ea[1].Trustee.ptstrName = (LPTSTR)pSIDAdmin;
 
-  if (ERROR_SUCCESS != SetEntriesInAcl(NUM_ACES,
+  if (ERROR_SUCCESS != SetEntriesInAcl(
+    NUM_ACES,
     ea,
-    NULL,
-    &pACL))
+    nullptr,
+    &pACL
+  ))
   {
-    printf("Failed SetEntriesInAcl\n");
+    wprintf(L"Failed SetEntriesInAcl\n");
     goto Cleanup;
   }
 
@@ -126,21 +146,25 @@ BOOL TakeOwnership(LPTSTR lpszOwnFile)
     lpszOwnFile,                 // name of the object
     SE_FILE_OBJECT,              // type of object
     DACL_SECURITY_INFORMATION,   // change only the object's DACL
-    NULL, NULL,                  // do not change owner or group
+    nullptr,
+    nullptr,                  // do not change owner or group
     pACL,                        // DACL specified
-    NULL);                       // do not change SACL
+    nullptr
+  );                       // do not change SACL
 
   if (ERROR_SUCCESS == dwRes)
   {
-    printf("Successfully changed DACL\n");
+    wprintf(L"Successfully changed DACL\n");
     bRetval = TRUE;
     // No more processing needed.
     goto Cleanup;
   }
   if (dwRes != ERROR_ACCESS_DENIED)
   {
-    printf("First SetNamedSecurityInfo call failed: %u\n",
-      dwRes);
+    wprintf(
+      L"First SetNamedSecurityInfo call failed: %lu\n",
+      dwRes
+    );
     goto Cleanup;
   }
 
@@ -150,18 +174,20 @@ BOOL TakeOwnership(LPTSTR lpszOwnFile)
   // disable the privilege. Then try again to set the object's DACL.
 
   // Open a handle to the access token for the calling process.
-  if (!OpenProcessToken(GetCurrentProcess(),
+  if (!OpenProcessToken(
+    GetCurrentProcess(),
     TOKEN_ADJUST_PRIVILEGES,
-    &hToken))
+    &hToken
+  ))
   {
-    printf("OpenProcessToken failed: %u\n", GetLastError());
+    wprintf(L"OpenProcessToken failed: %lu\n", GetLastError());
     goto Cleanup;
   }
 
   // Enable the SE_TAKE_OWNERSHIP_NAME privilege.
   if (!SetPrivilege(hToken, SE_TAKE_OWNERSHIP_NAME, TRUE))
   {
-    printf("You must be logged on as Administrator.\n");
+    wprintf(L"You must be logged on as Administrator.\n");
     goto Cleanup;
   }
 
@@ -171,20 +197,21 @@ BOOL TakeOwnership(LPTSTR lpszOwnFile)
     SE_FILE_OBJECT,              // type of object
     OWNER_SECURITY_INFORMATION,  // change only the object's owner
     pSIDAdmin,                   // SID of Administrator group
-    NULL,
-    NULL,
-    NULL);
+    nullptr,
+    nullptr,
+    nullptr
+  );
 
   if (dwRes != ERROR_SUCCESS)
   {
-    printf("Could not set owner. Error: %u\n", dwRes);
+    wprintf(L"Could not set owner. Error: %lu\n", dwRes);
     goto Cleanup;
   }
 
   // Disable the SE_TAKE_OWNERSHIP_NAME privilege.
   if (!SetPrivilege(hToken, SE_TAKE_OWNERSHIP_NAME, FALSE))
   {
-    printf("Failed SetPrivilege call unexpectedly.\n");
+    wprintf(L"Failed SetPrivilege call unexpectedly.\n");
     goto Cleanup;
   }
 
@@ -194,19 +221,20 @@ BOOL TakeOwnership(LPTSTR lpszOwnFile)
     lpszOwnFile,                 // name of the object
     SE_FILE_OBJECT,              // type of object
     DACL_SECURITY_INFORMATION,   // change only the object's DACL
-    NULL, NULL,                  // do not change owner or group
+    nullptr,
+    nullptr,                  // do not change owner or group
     pACL,                        // DACL specified
-    NULL);                       // do not change SACL
+    nullptr
+  );                       // do not change SACL
 
   if (dwRes == ERROR_SUCCESS)
   {
-    printf("Successfully changed DACL\n");
+    wprintf(L"Successfully changed DACL\n");
     bRetval = TRUE;
   }
   else
   {
-    printf("Second SetNamedSecurityInfo call failed: %u\n",
-      dwRes);
+    wprintf(L"Second SetNamedSecurityInfo call failed: %lu\n", dwRes);
   }
 
 Cleanup:
@@ -224,5 +252,4 @@ Cleanup:
     CloseHandle(hToken);
 
   return bRetval;
-
 }

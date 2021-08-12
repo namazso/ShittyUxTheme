@@ -61,14 +61,14 @@ static int do_the_patch(const wchar_t* image)
 
   if (!lib)
   {
-    wprintf(L"LoadLibraryExW failed: %u\n", GetLastError());
+    wprintf(L"LoadLibraryExW failed: %lu\n", GetLastError());
     return 0; // whatever
   }
 
   wchar_t path[MAX_PATH + 1];
   if (!GetModuleFileNameW(lib, path, (DWORD)std::size(path)))
   {
-    wprintf(L"GetModuleFileNameW failed: %u\n", GetLastError());
+    wprintf(L"GetModuleFileNameW failed: %lu\n", GetLastError());
     return 0;
   }
 
@@ -85,7 +85,7 @@ static int do_the_patch(const wchar_t* image)
   
   if (load_base == 0)
   {
-    wprintf(L"SymLoadModuleExW failed: %u\n", GetLastError());
+    wprintf(L"SymLoadModuleExW failed: %lu\n", GetLastError());
     return 0;
   }
 
@@ -126,7 +126,7 @@ static int do_the_patch(const wchar_t* image)
 #if defined(_M_IX86)
   {
     0x31, 0xC0,             // xor eax, eax
-    0xC3, 0x08, 0x00        // ret 8
+    0xC2, 0x08, 0x00        // ret 8
   }
 #elif defined(_M_AMD64)
   {
@@ -144,7 +144,7 @@ static int do_the_patch(const wchar_t* image)
   for (auto rva : patch_rvas)
   {
     const auto fo = rva2fo(file.data(), rva);
-    printf("found at rva %08X file offset %08X\n", rva, fo);
+    wprintf(L"found at rva %08X file offset %08X\n", rva, fo);
     if (fo == 0)
       continue;
     memcpy(file.data() + fo, patch, sizeof patch);
@@ -155,27 +155,27 @@ static int do_the_patch(const wchar_t* image)
 
   if(!write_all(patched_path.c_str(), file.data(), file.size()))
   {
-    fprintf(stderr, "write_all failed\n");
+    fwprintf(stderr, L"write_all failed\n");
     return 0;
   }
 
   if(!TakeOwnership(path))
   {
-    fwprintf(stderr, L"TakeOwnership failed: %u\n", GetLastError());
+    fwprintf(stderr, L"TakeOwnership failed: %lu\n", GetLastError());
     return 0;
   }
 
   if(!MoveFileW(path, backup_path.c_str()))
   {
-    fwprintf(stderr, L"MoveFileW %s -> %s failed: %u\n", path, backup_path.c_str(), GetLastError());
+    fwprintf(stderr, L"MoveFileW %s -> %s failed: %lu\n", path, backup_path.c_str(), GetLastError());
     return 0;
   }
 
   if (!MoveFileW(patched_path.c_str(), path))
   {
-    fwprintf(stderr, L"MoveFileW %s -> %s failed: %u\n", patched_path.c_str(), path, GetLastError());
+    fwprintf(stderr, L"MoveFileW %s -> %s failed: %lu\n", patched_path.c_str(), path, GetLastError());
     if (!MoveFileW(backup_path.c_str(), path))
-      fwprintf(stderr, L"MoveFileW %s -> %s failed: %u. This is pretty bad!\n", backup_path.c_str(), path, GetLastError());
+      fwprintf(stderr, L"MoveFileW %s -> %s failed: %lu. This is pretty bad!\n", backup_path.c_str(), path, GetLastError());
     return 0;
   }
 
@@ -189,21 +189,35 @@ constexpr static const wchar_t* s_images[] = {
   L"uxtheme",
 };
 
+enum return_code
+{
+  error_success,
+  error_no_symsrv,
+  error_sym_set_options,
+  error_get_temp_path,
+  error_sym_initialize,
+  error_none_patched
+};
+
 int main()
 {
-  LoadLibraryW(L"symsrv.dll");
+  if(nullptr == LoadLibraryW(L"symsrv.dll"))
+  {
+    fwprintf(stderr, L"Can't load symsrv: %lu\n", GetLastError());
+    return error_no_symsrv;
+  }
 
   if (!SymSetOptions(SYMOPT_UNDNAME | SYMOPT_EXACT_SYMBOLS | SYMOPT_FAIL_CRITICAL_ERRORS))
   {
-    fprintf(stderr, "SymSetOptions failed: %lu\n", GetLastError());
-    return 3;
+    fwprintf(stderr, L"SymSetOptions failed: %lu\n", GetLastError());
+    return error_sym_set_options;
   }
 
   wchar_t temp_path[MAX_PATH + 1];
   if(0 == GetTempPathW((DWORD)std::size(temp_path), temp_path))
   {
-    fprintf(stderr, "GetTempPathW failed: %lu\n", GetLastError());
-    return 6;
+    fwprintf(stderr, L"GetTempPathW failed: %lu\n", GetLastError());
+    return error_get_temp_path;
   }
 
   wchar_t search_path[MAX_PATH + 100];
@@ -211,8 +225,8 @@ int main()
 
   if (!SymInitializeW(GetCurrentProcess(), search_path, false))
   {
-    fprintf(stderr, "SymInitializeW failed: %lu\n", GetLastError());
-    return 4;
+    fwprintf(stderr, L"SymInitializeW failed: %lu\n", GetLastError());
+    return error_sym_initialize;
   }
   
   auto patched = 0;
@@ -226,11 +240,11 @@ int main()
 
   if (patched == 0)
   {
-    fprintf(stderr, "patching failed: none patched\n");
-    return 2;
+    fwprintf(stderr, L"patching failed: none patched\n");
+    return error_none_patched;
   }
 
-  printf("patched %d\n", patched);
+  wprintf(L"patched %d\n", patched);
 
   return 0;
 }
