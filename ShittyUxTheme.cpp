@@ -123,31 +123,37 @@ static int do_the_patch(const wchar_t* image)
   }
 
   constexpr static uint8_t patch[] =
-#if defined(_M_IX86)
   {
+#if defined(_M_IX86)
     0x31, 0xC0,             // xor eax, eax
     0xC2, 0x08, 0x00        // ret 8
-  }
 #elif defined(_M_AMD64)
-  {
     0x31, 0xC0,      // xor eax, eax
     0xC3                // ret
-  }
 #elif defined(_M_ARM64)
-  {
     0x00, 0x00, 0x80, 0x52, // mov w0, #0
     0xC0, 0x03, 0x5F, 0xD6, // ret
-  }
 #endif
-    ;
+  };
 
+  unsigned patched = 0;
   for (auto rva : patch_rvas)
   {
     const auto fo = rva2fo(file.data(), rva);
     wprintf(L"found at rva %08X file offset %08X\n", rva, fo);
     if (fo == 0)
       continue;
-    memcpy(file.data() + fo, patch, sizeof patch);
+    if (0 != memcmp(file.data() + fo, patch, sizeof patch))
+    {
+      memcpy(file.data() + fo, patch, sizeof patch);
+      patched++;
+    }
+  }
+
+  if (patched == 0)
+  {
+    wprintf(L"file already patched!\n");
+    return (int)patch_rvas.size();
   }
 
   const auto patched_path = std::wstring(path) + L".patched";
