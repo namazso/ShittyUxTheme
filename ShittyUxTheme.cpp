@@ -130,8 +130,8 @@ static int do_the_patch(const wchar_t* image)
   }
 #elif defined(_M_AMD64)
   {
-    0x31, 0xC0,             // xor eax, eax
-    0xC3                    // ret
+    0x31, 0xC0,      // xor eax, eax
+    0xC3                // ret
   }
 #elif defined(_M_ARM64)
   {
@@ -151,7 +151,7 @@ static int do_the_patch(const wchar_t* image)
   }
 
   const auto patched_path = std::wstring(path) + L".patched";
-  const auto backup_path = std::wstring(path) + L".bak";
+  const auto backup_path = std::wstring(path) + L".bak" + std::to_wstring(_time64(nullptr));
 
   if(!write_all(patched_path.c_str(), file.data(), file.size()))
   {
